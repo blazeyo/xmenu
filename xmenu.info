@@ -1,0 +1,6 @@
+; $Id$
+name = Xmenu
+description = Lets you display big hierarchical menus the nice and user-friendly way.
+core = 7.x
+package = "Meant4"
+files[] = xmenu.module

@@ -1,0 +1,204 @@
+<?php
+
+/**
+ *  Błażej Owczarczyk
+ *  blazej.owczarczyk@gmail.com
+ *
+ *  Name: Xmenu.
+ *  Description: Lets you display big hierarchical menus the nice and user-friendly way.
+ */
+
+/**
+ * TODO:
+ * 1. theme functions: xmenu_block, xmenu_item.
+ * 2. Add cashing per user somehow.
+ * 3. Make new menu block instead of overwriting the standard one. important
+ */
+
+/**
+ * Implements hook_theme().
+ */
+function xmenu_theme($existing, $type, $theme, $path) {
+  return array(
+    'xmenu_root_item' => array(
+      'render element' => 'root_item',
+      'path' => drupal_get_path('module', 'xmenu'),
+      'template' => 'xmenu-item',
+    ),
+    'xmenu_child_item' => array(
+      'render element' => 'child',
+    ),
+  );
+}
+
+/**
+ * Implements hook_form_alter().
+ */
+function xmenu_form_menu_edit_menu_alter(&$form, &$form_state, $form_id) {
+  $settings = xmenu_get_settings();
+  $form['xmenu_enable'] = array(
+      '#type' => 'checkbox',
+      '#title' => t('Enable xmenu'),
+      '#default_value' => $settings[$form['old_name']['#value']],
+  );
+  $form['actions']['submit']['#submit'][] = 'xmenu_handle_submit';
+}
+
+function xmenu_handle_submit($form, &$form_state) {
+  $settings = xmenu_get_settings();
+
+  // Menu name has changed, so unset old setting.
+  if ($form_state['values']['old_name'] != $form_state['values']['menu_name']) {
+    unset($settings[$form_state['values']['old_name']]);
+  }
+  // Save current one.
+  $settings[$form_state['values']['menu_name']] = $form_state['values']['xmenu_enable'];
+
+  xmenu_set_settings($settings);
+}
+
+/**
+ * Implements hook_block_info
+ */
+function xmenu_block_info() {
+  $settings = xmenu_get_settings();
+  $menus = menu_get_menus();
+  foreach ($settings as $menu_name => $enabled) {
+    if ($enabled) {
+      $blocks[$menu_name] = array(
+        'info' => t('Xmenu: @menu-name', array('@menu-name' => $menus[$menu_name])),
+        'cache' => DRUPAL_CACHE_GLOBAL,
+      );
+    }
+  }
+  
+  return $blocks;
+}
+
+function xmenu_block_view($delta = '') {
+  xmenu_attach_files();
+  $menus = menu_get_menus(FALSE);
+  $data['subject'] = check_plain($menus[$delta]);
+  $data['content'] = xmenu_tree_output($delta);
+  // Add contextual links for this block.
+  if (!empty($data['content'])) {
+    $data['content']['#contextual_links']['menu'] = array('admin/structure/menu/manage', array($delta));
+  }
+  return $data;
+}
+
+function xmenu_tree_output($menu_name) {
+  foreach (menu_tree_output(menu_tree_page_data($menu_name, 2)) as $key => $item) {
+    if (drupal_substr($key, 0, 1) == '#') {
+      continue;
+    }
+    $item['#theme'] = 'xmenu_root_item';
+    $items[$key] = $item;
+    foreach ($items[$key]['#below'] as $subkey => $value) {
+      if (drupal_substr($subkey, 0, 1) == '#') {
+        continue;
+      }
+      $items[$key]['#below'][$subkey]['#theme'] = 'xmenu_child_item';
+    }
+  }
+  
+  return $items;
+}
+
+function template_preprocess_xmenu_root_item(&$variables) {
+  $element = $variables['root_item'];
+
+  $children = array();
+  $counter = 0;
+  foreach ($element['#below'] as $key => $item) {
+    if (is_numeric($key)) {
+      drupal_alter('xmenu_child_item', $item);
+      $children[$counter++ % 2][$key] = $item;
+    }
+  }
+  $variables['children_first'] = $children[0];
+  $variables['children_second'] = $children[1];
+  unset($element['#below']);
+
+  $variables['close'] = '<div class="xmenu-item-children-close">' . t('close') . '</div>';
+
+  drupal_alter('xmenu_root_item', $element);
+  $variables['parent_link'] = l($element['#title'], $element['#href'], array('attributes' => $element['#attributes']));
+}
+
+function xmenu_xmenu_child_item_alter(&$item) {
+  // Check if this item points to a taxonomy term.
+  $href_parts = explode('/', $item['#href']);
+  if (count($href_parts) == 3 && $href_parts[0] == 'taxonomy' && $href_parts[1] == 'term' && is_numeric($tid = $href_parts[2])) {
+    $item['#count'] = xmenu_tagged_entities_count($tid);
+  }
+}
+
+/**
+ * Counts number of entities with target term attached.
+ *
+ * @todo We need caching here. We really do.
+ *
+ * @param int $tid
+ * @return int
+ */
+function xmenu_tagged_entities_count($tid) {
+  $term = taxonomy_term_load($tid);
+  $count = 0;
+  foreach (field_info_instances() as $entity_type => $type_bundles) {
+    foreach ($type_bundles as $bundle => $bundle_instances) {
+      foreach ($bundle_instances as $field_name => $instance) {
+        $field = field_info_field($field_name);
+        if ($field['type'] == 'taxonomy_term_reference') {
+          foreach ($field['settings']['allowed_values'] as $allowed_values) {
+            if ($allowed_values['vocabulary'] == $term->vocabulary_machine_name) {
+              $vocabulary = taxonomy_vocabulary_machine_name_load($term->vocabulary_machine_name);
+              $tids = array();
+              foreach (taxonomy_get_tree($vocabulary->vid, $term->tid) as $k => $t) {
+                $tids[] = $t->tid;
+              }
+              if (!empty($tids)) {
+                $tmp = $field['storage']['details']['sql'][FIELD_LOAD_CURRENT];
+                $table = array_shift(array_keys($tmp));
+                $column = $tmp[$table]['tid'];
+                $query = 'SELECT COUNT(*) FROM {' . $table . '} WHERE ' . $column . ' IN(' . implode(', ', $tids) . ')';
+                $count += db_query($query)->fetchField();
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  return $count;
+}
+
+function theme_xmenu_child_item($element) {
+  $link = l($element['child']['#title'], $element['child']['#href']);
+  $suffix = isset($element['child']['#count']) ? ' (' . $element['child']['#count'] . ')' : '';
+
+  return '<div class="xmenu-child-item">' . $link . $suffix . '</div>';
+}
+
+/**
+ * Get module settings.
+ *
+ * @return array
+ */
+function xmenu_get_settings() {
+  return variable_get('xmenu_settings', array());
+}
+
+/**
+ * Save module settings.
+ *
+ * @param array $settings
+ */
+function xmenu_set_settings($settings) {
+  variable_set('xmenu_settings', $settings);
+}
+
+function xmenu_attach_files() {
+  drupal_add_css(drupal_get_path('module', 'xmenu') . '/xmenu.css');
+  drupal_add_js(drupal_get_path('module', 'xmenu') . '/xmenu.js');
+} 
