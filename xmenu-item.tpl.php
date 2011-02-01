@@ -1,6 +1,11 @@
 <?php
-
-
+// $Id$
+/**
+ *  @file xmenu-item.tpl.php
+ *  Xmenu root item template.
+ *
+ *  @see template_preprocess_xmenu_root_item
+ */
 ?>
 <div class="xmenu-item">
   <div class="xmenu-item-root">

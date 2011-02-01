@@ -1,4 +1,5 @@
 <?php
+// $Id$
 
 /**
  *  Błażej Owczarczyk
@@ -6,13 +7,6 @@
  *
  *  Name: Xmenu.
  *  Description: Lets you display big hierarchical menus the nice and user-friendly way.
- */
-
-/**
- * TODO:
- * 1. theme functions: xmenu_block, xmenu_item.
- * 2. Add cashing per user somehow.
- * 3. Make new menu block instead of overwriting the standard one. important
  */
 
 /**
@@ -32,7 +26,7 @@ function xmenu_theme($existing, $type, $theme, $path) {
 }
 
 /**
- * Implements hook_form_alter().
+ * Implements hook_form_alter(). Adds a checkbox to menu_edit_menu form.
  */
 function xmenu_form_menu_edit_menu_alter(&$form, &$form_state, $form_id) {
   $settings = xmenu_get_settings();
@@ -44,6 +38,9 @@ function xmenu_form_menu_edit_menu_alter(&$form, &$form_state, $form_id) {
   $form['actions']['submit']['#submit'][] = 'xmenu_handle_submit';
 }
 
+/**
+ * Submit handler for menu_edit_menu form.
+ */
 function xmenu_handle_submit($form, &$form_state) {
   $settings = xmenu_get_settings();
 
@@ -63,18 +60,21 @@ function xmenu_handle_submit($form, &$form_state) {
 function xmenu_block_info() {
   $settings = xmenu_get_settings();
   $menus = menu_get_menus();
+  // Add block instance for each menu that has our checkbox checked.
   foreach ($settings as $menu_name => $enabled) {
     if ($enabled) {
       $blocks[$menu_name] = array(
         'info' => t('Xmenu: @menu-name', array('@menu-name' => $menus[$menu_name])),
-        'cache' => DRUPAL_CACHE_GLOBAL,
+        'cache' => DRUPAL_CACHE_PER_USER,
       );
     }
   }
-  
   return $blocks;
 }
 
+/**
+ * Implements hook_block_view().
+ */
 function xmenu_block_view($delta = '') {
   xmenu_attach_files();
   $menus = menu_get_menus(FALSE);
@@ -87,45 +87,65 @@ function xmenu_block_view($delta = '') {
   return $data;
 }
 
+/**
+ * Prepares menu tree.
+ */
 function xmenu_tree_output($menu_name) {
+  // Get menu items with depth less than 3 (root items and their children).
   foreach (menu_tree_output(menu_tree_page_data($menu_name, 2)) as $key => $item) {
+    // Skip properties. We only need menu items.
     if (drupal_substr($key, 0, 1) == '#') {
       continue;
     }
+    // Prepare root menu item
     $item['#theme'] = 'xmenu_root_item';
-    $items[$key] = $item;
-    foreach ($items[$key]['#below'] as $subkey => $value) {
+    foreach ($item['#below'] as $subkey => $value) {
       if (drupal_substr($subkey, 0, 1) == '#') {
         continue;
       }
-      $items[$key]['#below'][$subkey]['#theme'] = 'xmenu_child_item';
+      $item['#below'][$subkey]['#theme'] = 'xmenu_child_item';
     }
+    // and add it to results array.
+    $items[$key] = $item;
   }
-  
   return $items;
 }
 
+/**
+ * Preprocess function for xmenu-root-item.tpl.php.
+ */
 function template_preprocess_xmenu_root_item(&$variables) {
   $element = $variables['root_item'];
 
+  // Divide child items into 2 columns.
   $children = array();
   $counter = 0;
   foreach ($element['#below'] as $key => $item) {
+    // Only add menu items.
     if (is_numeric($key)) {
+      /**
+       * Let other modules change child items. Common use case is to set the #count property that will be displayed in round brackes.
+       * @see theme_xmenu_child_item
+       */
       drupal_alter('xmenu_child_item', $item);
       $children[$counter++ % 2][$key] = $item;
     }
   }
   $variables['children_first'] = $children[0];
   $variables['children_second'] = $children[1];
-  unset($element['#below']);
 
+  // Closing element for children view.
   $variables['close'] = '<div class="xmenu-item-children-close">' . t('close') . '</div>';
 
+  // Unset #below. Child elements are alterable through xmenu_child_menu_alter($item).
+  unset($element['#below']);
   drupal_alter('xmenu_root_item', $element);
   $variables['parent_link'] = l($element['#title'], $element['#href'], array('attributes' => $element['#attributes']));
 }
 
+/**
+ * Implements hook_xmenu_child_item_alter().
+ */
 function xmenu_xmenu_child_item_alter(&$item) {
   // Check if this item points to a taxonomy term.
   $href_parts = explode('/', $item['#href']);
@@ -173,17 +193,18 @@ function xmenu_tagged_entities_count($tid) {
   return $count;
 }
 
+/**
+ * Themes child menu item.
+ */
 function theme_xmenu_child_item($element) {
   $link = l($element['child']['#title'], $element['child']['#href']);
+  // If the #count property is set put it in round brackets after the link.
   $suffix = isset($element['child']['#count']) ? ' (' . $element['child']['#count'] . ')' : '';
-
   return '<div class="xmenu-child-item">' . $link . $suffix . '</div>';
 }
 
 /**
  * Get module settings.
- *
- * @return array
  */
 function xmenu_get_settings() {
   return variable_get('xmenu_settings', array());
@@ -191,13 +212,14 @@ function xmenu_get_settings() {
 
 /**
  * Save module settings.
- *
- * @param array $settings
  */
 function xmenu_set_settings($settings) {
   variable_set('xmenu_settings', $settings);
 }
 
+/**
+ * Attaches other module files.
+ */
 function xmenu_attach_files() {
   drupal_add_css(drupal_get_path('module', 'xmenu') . '/xmenu.css');
   drupal_add_js(drupal_get_path('module', 'xmenu') . '/xmenu.js');
