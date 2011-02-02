@@ -9,6 +9,8 @@
  *  Description: Lets you display big hierarchical menus the nice and user-friendly way.
  */
 
+include_once 'xmenu.taxonomy.inc';
+
 /**
  * Implements hook_theme().
  */
@@ -99,13 +101,21 @@ function xmenu_tree_output($menu_name) {
     }
     // Prepare root menu item
     $item['#theme'] = 'xmenu_root_item';
-    foreach ($item['#below'] as $subkey => $value) {
+    foreach ($item['#below'] as $subkey => $child_item) {
       if (drupal_substr($subkey, 0, 1) == '#') {
         continue;
       }
-      $item['#below'][$subkey]['#theme'] = 'xmenu_child_item';
+      /**
+       * Let other modules change child items. Common use case is to set the #count property that will be displayed in round brackes.
+       * This settings are available (and thus can be overridden) in hook_xmenu_root_item_alter().
+       * @see theme_xmenu_child_item
+       */
+      drupal_alter('xmenu_child_item', $child_item);
+      $child_item['#theme'] = 'xmenu_child_item';
+      $item['children'][$subkey] = $child_item;
     }
     // and add it to results array.
+    drupal_alter('xmenu_root_item', $item);
     $items[$key] = $item;
   }
   return $items;
@@ -120,16 +130,8 @@ function template_preprocess_xmenu_root_item(&$variables) {
   // Divide child items into 2 columns.
   $children = array();
   $counter = 0;
-  foreach ($element['#below'] as $key => $item) {
-    // Only add menu items.
-    if (is_numeric($key)) {
-      /**
-       * Let other modules change child items. Common use case is to set the #count property that will be displayed in round brackes.
-       * @see theme_xmenu_child_item
-       */
-      drupal_alter('xmenu_child_item', $item);
-      $children[$counter++ % 2][$key] = $item;
-    }
+  foreach ($element['children'] as $key => $item) {
+    $children[$counter++ % 2][$key] = $item;
   }
   $variables['children_first'] = $children[0];
   $variables['children_second'] = $children[1];
@@ -137,60 +139,8 @@ function template_preprocess_xmenu_root_item(&$variables) {
   // Closing element for children view.
   $variables['close'] = '<div class="xmenu-item-children-close">' . t('close') . '</div>';
 
-  // Unset #below. Child elements are alterable through xmenu_child_menu_alter($item).
-  unset($element['#below']);
-  drupal_alter('xmenu_root_item', $element);
   $variables['parent_link'] = l($element['#title'], $element['#href'], array('attributes' => $element['#attributes']));
-}
-
-/**
- * Implements hook_xmenu_child_item_alter().
- */
-function xmenu_xmenu_child_item_alter(&$item) {
-  // Check if this item points to a taxonomy term.
-  $href_parts = explode('/', $item['#href']);
-  if (count($href_parts) == 3 && $href_parts[0] == 'taxonomy' && $href_parts[1] == 'term' && is_numeric($tid = $href_parts[2])) {
-    $item['#count'] = xmenu_tagged_entities_count($tid);
-  }
-}
-
-/**
- * Counts number of entities with target term attached.
- *
- * @todo We need caching here. We really do.
- *
- * @param int $tid
- * @return int
- */
-function xmenu_tagged_entities_count($tid) {
-  $term = taxonomy_term_load($tid);
-  $count = 0;
-  foreach (field_info_instances() as $entity_type => $type_bundles) {
-    foreach ($type_bundles as $bundle => $bundle_instances) {
-      foreach ($bundle_instances as $field_name => $instance) {
-        $field = field_info_field($field_name);
-        if ($field['type'] == 'taxonomy_term_reference') {
-          foreach ($field['settings']['allowed_values'] as $allowed_values) {
-            if ($allowed_values['vocabulary'] == $term->vocabulary_machine_name) {
-              $vocabulary = taxonomy_vocabulary_machine_name_load($term->vocabulary_machine_name);
-              $tids = array();
-              foreach (taxonomy_get_tree($vocabulary->vid, $term->tid) as $k => $t) {
-                $tids[] = $t->tid;
-              }
-              if (!empty($tids)) {
-                $tmp = $field['storage']['details']['sql'][FIELD_LOAD_CURRENT];
-                $table = array_shift(array_keys($tmp));
-                $column = $tmp[$table]['tid'];
-                $query = 'SELECT COUNT(*) FROM {' . $table . '} WHERE ' . $column . ' IN(' . implode(', ', $tids) . ')';
-                $count += db_query($query)->fetchField();
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-  return $count;
+  $variables['additional'] = $element['#additional'];
 }
 
 /**

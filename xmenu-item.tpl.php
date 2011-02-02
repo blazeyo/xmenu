@@ -9,12 +9,22 @@
 ?>
 <div class="xmenu-item">
   <div class="xmenu-item-root">
-    <?php print $parent_link ?>
+    <div class="xmenu-item-root-left">
+      <div class="xmenu-item-root-parent-name">
+        <?php print $parent_link ?>
+      </div>
+      <?php if(!empty($additional)): ?>
+        <div class="xmenu-item-root-additional">
+          <?php print $additional ?>
+        </div>
+      <? endif; ?>
+    </div>
     <?php if(!empty($children_first) || !empty($children_second)): ?>
       <div class="xmenu-expand">
         >
       </div>
     <? endif; ?>
+    <div class="clear"></div>
   </div>
   <?php if(!empty($children_first) || !empty($children_second)): ?>
     <div class="xmenu-item-children">

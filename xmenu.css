@@ -1,6 +1,9 @@
 /* $Id$ */
 .xmenu-item-root { border: 1px solid #eee; margin: 1px 0; min-height: 3em; }
-.xmenu-expand { border-left: 1px solid #eee; cursor: pointer; float: right; height: 3em; line-height: 3em; }
+.xmenu-item-root-left { float: left; width: 95%; }
+.xmenu-item-root-parent-name { font-weight: bold; margin-bottom: 5px; }
+.xmenu-item-root-additional, .xmenu-item-root-additional a { font-size: 0.85em; }
+.xmenu-expand { background: #eee; cursor: pointer; float: right; height: inherit; line-height: 3em; width: 5%; }
 .xmenu-item-children { background: #eee; display: none; padding: 5px; position: absolute; width: 450px; z-index: 10; }
 .xmenu-item-children-left, .xmenu-item-children-right { float: left; margin-top: 1em; width: 50%; }
 .xmenu-item-children-close { cursor: pointer; float: right; }
