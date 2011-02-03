@@ -40,7 +40,7 @@ function xmenu_form_menu_edit_menu_alter(&$form, &$form_state, $form_id) {
       '#title' => t('Enable xmenu'),
       '#default_value' => $settings[$form['old_name']['#value']],
   );
-  $form['actions']['submit']['#submit'][] = 'xmenu_handle_submit';
+  $form['#submit'][] = 'xmenu_handle_submit';
 }
 
 /**
