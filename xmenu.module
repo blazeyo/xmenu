@@ -16,6 +16,9 @@ include_once 'xmenu.taxonomy.inc';
  */
 function xmenu_theme($existing, $type, $theme, $path) {
   return array(
+    'xmenu' => array(
+      'render element' => 'xmenu',
+    ),
     'xmenu_root_item' => array(
       'render element' => 'root_item',
       'path' => drupal_get_path('module', 'xmenu'),
@@ -94,31 +97,34 @@ function xmenu_block_view($delta = '') {
  */
 function xmenu_tree_output($menu_name) {
   // Get menu items with depth less than 3 (root items and their children).
-  foreach (menu_tree_output(menu_tree_page_data($menu_name, 2)) as $key => $item) {
-    // Skip properties. We only need menu items.
-    if (drupal_substr($key, 0, 1) == '#') {
-      continue;
-    }
-    // Prepare root menu item
+  foreach (menu_build_tree($menu_name, array('max_depth' => 2)) as $key => $menu_item) {
+    // Prepare new root menu item
+    $item = _xmenu_extract_data_from_menu_item($menu_item);
     $item['#theme'] = 'xmenu_root_item';
-    foreach ($item['#below'] as $subkey => $child_item) {
-      if (drupal_substr($subkey, 0, 1) == '#') {
-        continue;
-      }
+    foreach ($menu_item['below'] as $subkey => $child_item) {
       /**
        * Let other modules change child items. Common use case is to set the #count property that will be displayed in round brackes.
        * This settings are available (and thus can be overridden) in hook_xmenu_root_item_alter().
        * @see theme_xmenu_child_item
        */
-      drupal_alter('xmenu_child_item', $child_item);
-      $child_item['#theme'] = 'xmenu_child_item';
-      $item['children'][$subkey] = $child_item;
+      $item['children'][$subkey] = _xmenu_extract_data_from_menu_item($child_item);
+      $item['children'][$subkey]['#theme'] = 'xmenu_child_item';
+      drupal_alter('xmenu_child_item', $item['children'][$subkey]);
     }
     // and add it to results array.
     drupal_alter('xmenu_root_item', $item);
-    $items[$key] = $item;
+    $xmenu[$key] = $item;
   }
-  return $items;
+  $xmenu['#theme_wrappers'] = array('xmenu');
+  return $xmenu;
+}
+
+function _xmenu_extract_data_from_menu_item($menu_item) {
+  return array(
+    '#href' => $menu_item['link']['link_path'],
+    '#title' => $menu_item['link']['link_title'],
+    '#attributes' => array(),
+  );
 }
 
 /**
@@ -130,8 +136,10 @@ function template_preprocess_xmenu_root_item(&$variables) {
   // Divide child items into 2 columns.
   $children = array();
   $counter = 0;
-  foreach ($element['children'] as $key => $item) {
-    $children[$counter++ % 2][$key] = $item;
+  if (is_array($element['children'])) {
+    foreach ($element['children'] as $key => $item) {
+      $children[$counter++ % 2][$key] = $item;
+    }
   }
   $variables['children_first'] = $children[0];
   $variables['children_second'] = $children[1];
@@ -139,6 +147,8 @@ function template_preprocess_xmenu_root_item(&$variables) {
   // Closing element for children view.
   $variables['close'] = '<div class="xmenu-item-children-close">' . t('close') . '</div>';
 
+  $variables['parent_link_prefix'] = $element['#parent_link_prefix'];
+  $variables['parent_link_suffix'] = $element['#parent_link_suffix'];
   $variables['parent_link'] = l($element['#title'], $element['#href'], array('attributes' => $element['#attributes']));
   $variables['additional'] = $element['#additional'];
 }
@@ -151,6 +161,13 @@ function theme_xmenu_child_item($element) {
   // If the #count property is set put it in round brackets after the link.
   $suffix = isset($element['child']['#count']) ? ' (' . $element['child']['#count'] . ')' : '';
   return '<div class="xmenu-child-item">' . $link . $suffix . '</div>';
+}
+
+/**
+ * Xmenu theme wrapper.
+ */
+function theme_xmenu(&$variables) {
+  return '<div class="xmenu">' . $variables['xmenu']['#children'] . '</div>';
 }
 
 /**

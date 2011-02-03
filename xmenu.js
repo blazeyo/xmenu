@@ -8,7 +8,7 @@
 var XmenuController = XmenuController || {};
 
 /** Root menu items states. */
-XmenuController.states = { 'closed': 0, 'open': 1 };
+XmenuController.states = {'closed': 0, 'open': 1};
 
 
 /**
@@ -30,8 +30,8 @@ XmenuController.XmenuItem = function ($item) {
     // Position children on the right of root item div.
     var offset = $item.position();
     $children.css({
-      "top": offset.top + "px",
-      "left": (offset.left + $item.width()) + "px"
+      "top": Math.floor(offset.top) + "px",
+      "left": Math.floor(offset.left + $item.width()) + "px"
     });
 
     // Attach event handlers.

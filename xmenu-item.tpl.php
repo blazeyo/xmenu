@@ -11,7 +11,9 @@
   <div class="xmenu-item-root">
     <div class="xmenu-item-root-left">
       <div class="xmenu-item-root-parent-name">
+        <?php print $parent_link_prefix ?>
         <?php print $parent_link ?>
+        <?php print $parent_link_suffix ?>
       </div>
       <?php if(!empty($additional)): ?>
         <div class="xmenu-item-root-additional">
@@ -40,3 +42,4 @@
     </div>
   <?php endif; ?>
 </div>
+<div class="clear"></div>
