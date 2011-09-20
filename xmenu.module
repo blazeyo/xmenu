@@ -9,8 +9,6 @@
  *  Description: Lets you display big hierarchical menus the nice and user-friendly way.
  */
 
-include_once 'xmenu.taxonomy.inc';
-
 /**
  * Implements hook_theme().
  */
